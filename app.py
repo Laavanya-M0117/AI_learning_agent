@@ -264,6 +264,21 @@ Follow these rules:
 with st.sidebar.expander("👁️ View System/Persona Prompt"):
     st.code(system_prompt, language="text")
 
+from pydantic import BaseModel
+from typing import List
+
+# Pydantic schemas to enforce 100% valid JSON structure from Gemini
+class QuizQuestion(BaseModel):
+    question: str
+    options: List[str]
+    answer_index: int
+    explanation: str
+
+class Curriculum(BaseModel):
+    explanation: str
+    example: str
+    quiz: List[QuizQuestion]
+
 # Helper function to call Gemini API with automatic fallback for high-demand spikes (503)
 def get_gemini_response(prompt_text, system_instruction_text=None, is_json=False):
     if not api_key:
@@ -284,6 +299,7 @@ def get_gemini_response(prompt_text, system_instruction_text=None, is_json=False
                 config.system_instruction = system_instruction_text
             if is_json:
                 config.response_mime_type = "application/json"
+                config.response_schema = Curriculum
                 
             response = client.models.generate_content(
                 model=model,
