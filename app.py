@@ -103,77 +103,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- SESSION STATE INITS -----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if "quiz_generated" not in st.session_state:
-    st.session_state.quiz_generated = None
-
-if "quiz_answers" not in st.session_state:
-    st.session_state.quiz_answers = {}
-
-if "quiz_submitted" not in st.session_state:
-    st.session_state.quiz_submitted = False
-
-if "last_topic" not in st.session_state:
-    st.session_state.last_topic = ""
-
-# ----------------- SIDEBAR CONFIG -----------------
-st.sidebar.markdown("### 🛠️ Configuration")
-
-# API Key handling
-env_api_key = os.environ.get("GEMINI_API_KEY", "")
-api_key = st.sidebar.text_input(
-    "Gemini API Key",
-    value=env_api_key,
-    type="password",
-    help="Enter your Google Gemini API Key. Get one from Google AI Studio."
-)
-
-model_name = st.sidebar.selectbox(
-    "Gemini Model",
-    ["gemini-1.5-flash", "gemini-1.5-pro"],
-    index=0
-)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎓 Learning Buddy Customization")
-
-topic = st.sidebar.text_input(
-    "Learning Topic",
-    value="Binary Search",
-    help="Define the topic the AI Buddy will teach."
-)
-
-# Detect topic change to reset quiz
-if topic != st.session_state.last_topic:
-    st.session_state.quiz_generated = None
-    st.session_state.quiz_answers = {}
-    st.session_state.quiz_submitted = False
-    st.session_state.messages = []
-    st.session_state.last_topic = topic
-
-buddy_name = st.sidebar.text_input(
-    "Buddy Persona Name",
-    value="Socrates the Searcher"
-)
-
-# Standardized Persona Prompts (reusable for any topic)
-system_prompt = f"""You are {buddy_name}, a patient, encouraging computer science tutor. Your goal is to help the user understand the concept of {topic}.
-Follow these rules:
-1. Do NOT just give the student the answer. Instead, ask guided questions to lead them to the answer (the Socratic method).
-2. Explain concepts in simple, plain language. Avoid jargon unless you define it first.
-3. Use real-life analogies, like looking up a word in an alphabetical dictionary, to make the concept concrete.
-4. Provide positive reinforcement and constructive feedback on their responses.
-5. Always check understanding and ask them to explain a small part back to you or solve a simple mini-puzzle before moving on to more complex details.
-"""
-
-with st.sidebar.expander("👁️ View System/Persona Prompt"):
-    st.code(system_prompt, language="text")
-
 # ----------------- MOCK DATA FOR BINARY SEARCH -----------------
-# This allows the app to be fully functional and aesthetic out-of-the-box even without an API Key!
 mock_explanation = """
 ### Understanding Binary Search
 
@@ -269,27 +199,77 @@ mock_quiz = [
     }
 ]
 
-# ----------------- MAIN UI -----------------
-st.markdown('<div class="gradient-title">🎓 AI Learning Buddy</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="subtitle">Meet <b>{buddy_name}</b>, your interactive guide to mastering <b>{topic}</b>.</div>', unsafe_allow_html=True)
+# ----------------- SESSION STATE INITS -----------------
+if "current_content" not in st.session_state:
+    st.session_state.current_content = {
+        "explanation": mock_explanation,
+        "example": mock_example,
+        "quiz": mock_quiz
+    }
 
-# Tabs definition
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📖 Explain Concept",
-    "💡 Real-Life Example",
-    "🧠 Take a Quiz",
-    "💬 Chat with Tutor"
-])
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "quiz_answers" not in st.session_state:
+    st.session_state.quiz_answers = {}
+
+if "quiz_submitted" not in st.session_state:
+    st.session_state.quiz_submitted = False
+
+if "last_topic" not in st.session_state:
+    st.session_state.last_topic = "Binary Search"
+
+# ----------------- SIDEBAR CONFIG -----------------
+st.sidebar.markdown("### 🛠️ Configuration")
+
+# API Key handling
+env_api_key = os.environ.get("GEMINI_API_KEY", "")
+api_key = st.sidebar.text_input(
+    "Gemini API Key",
+    value=env_api_key,
+    type="password",
+    help="Enter your Google Gemini API Key. Get one from Google AI Studio."
+)
+
+model_name = st.sidebar.selectbox(
+    "Gemini Model",
+    ["gemini-3.5-flash", "gemini-3.1-flash-lite"],
+    index=0
+)
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎓 Learning Buddy Customization")
+
+topic = st.sidebar.text_input(
+    "Learning Topic",
+    value="Binary Search",
+    help="Define the topic the AI Buddy will teach."
+)
+
+buddy_name = st.sidebar.text_input(
+    "Buddy Persona Name",
+    value="Socrates the Searcher"
+)
+
+# Standardized Persona Prompts (reusable for any topic)
+system_prompt = f"""You are {buddy_name}, a patient, encouraging computer science tutor. Your goal is to help the user understand the concept of {topic}.
+Follow these rules:
+1. Do NOT just give the student the answer. Instead, ask guided questions to lead them to the answer (the Socratic method).
+2. Explain concepts in simple, plain language. Avoid jargon unless you define it first.
+3. Use real-life analogies, like looking up a word in an alphabetical dictionary, to make the concept concrete.
+4. Provide positive reinforcement and constructive feedback on their responses.
+5. Always check understanding and ask them to explain a small part back to you or solve a simple mini-puzzle before moving on to more complex details.
+"""
+
+with st.sidebar.expander("👁️ View System/Persona Prompt"):
+    st.code(system_prompt, language="text")
 
 # Helper function to call Gemini API
 def get_gemini_response(prompt_text, system_instruction_text=None, is_json=False):
     if not api_key:
         return None
     try:
-        # Initialize client with API key
         client = genai.Client(api_key=api_key)
-        
-        # Build generation configuration
         config = types.GenerateContentConfig()
         if system_instruction_text:
             config.system_instruction = system_instruction_text
@@ -306,105 +286,105 @@ def get_gemini_response(prompt_text, system_instruction_text=None, is_json=False
         st.error(f"Error calling Gemini API: {str(e)}")
         return None
 
+# Combined generation function
+def generate_all_topic_materials():
+    if not api_key:
+        st.sidebar.warning("⚠️ Please provide a Gemini API Key to generate content.")
+        return
+
+    # Reset chat and quiz state for the new topic
+    st.session_state.messages = []
+    st.session_state.quiz_answers = {}
+    st.session_state.quiz_submitted = False
+    st.session_state.last_topic = topic
+
+    with st.sidebar:
+        with st.spinner(f"Generating full curriculum for {topic}..."):
+            combined_prompt = f"""You are an expert curriculum builder. Generate beginner-friendly learning materials for the topic: "{topic}".
+Return a JSON object with exactly the following keys and structures:
+- "explanation": string (A detailed markdown explanation of the concept of {topic}. Use subheadings, bullet points, and highlight key terms. Explain it in simple terms, avoiding complex jargon.)
+- "example": string (A detailed markdown description of one concrete, real-life example or analogy that intuitively illustrates how {topic} works. Make it relatable and engaging, without showing code.)
+- "quiz": list of 5 multiple-choice questions, where each question is a JSON object with:
+  - "question": string (the question text)
+  - "options": list of 4 strings (multiple choice options)
+  - "answer_index": integer (0 for the first option, 1 for second, 2 for third, 3 for fourth)
+  - "explanation": string (a brief explanation of why the correct option is right)
+Ensure the JSON is strictly valid, does not contain comments, and conforms to this structure.
+"""
+            response = get_gemini_response(combined_prompt, is_json=True)
+            if response:
+                try:
+                    cleaned = response.strip()
+                    if cleaned.startswith("```json"):
+                        cleaned = cleaned[7:]
+                    if cleaned.endswith("```"):
+                        cleaned = cleaned[:-3]
+                    cleaned = cleaned.strip()
+                    
+                    parsed = json.loads(cleaned)
+                    st.session_state.current_content = parsed
+                    st.sidebar.success("🎉 All materials loaded!")
+                except Exception as e:
+                    st.sidebar.error(f"Error parsing curriculum JSON: {str(e)}")
+
+# Sidebar Load Button
+load_btn = st.sidebar.button("🎓 Load Topic & Generate All", type="primary", on_click=generate_all_topic_materials)
+
+# Detect if topic name reverted to default to reset mock data
+if topic.lower() == "binary search" and st.session_state.last_topic != "Binary Search" and st.session_state.current_content.get("explanation") != mock_explanation:
+    st.session_state.current_content = {
+        "explanation": mock_explanation,
+        "example": mock_example,
+        "quiz": mock_quiz
+    }
+    st.session_state.messages = []
+    st.session_state.quiz_answers = {}
+    st.session_state.quiz_submitted = False
+    st.session_state.last_topic = "Binary Search"
+
+# ----------------- MAIN UI -----------------
+st.markdown('<div class="gradient-title">🎓 AI Learning Buddy</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="subtitle">Meet <b>{buddy_name}</b>, your interactive guide to mastering <b>{topic}</b>.</div>', unsafe_allow_html=True)
+
+# Tabs definition
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📖 Explain Concept",
+    "💡 Real-Life Example",
+    "🧠 Take a Quiz",
+    "💬 Chat with Tutor"
+])
+
 # ----------------- TAB 1: EXPLAIN CONCEPT -----------------
 with tab1:
     st.markdown("### Learn the Core Concept")
-    st.write(f"Click the button below to generate an intuitive explanation of **{topic}**.")
     
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        generate_explanation = st.button("✨ Explain Concept", key="btn_explain")
-    
-    explanation_placeholder = st.container()
-    
-    if generate_explanation:
-        if api_key:
-            with st.spinner("Generating beautiful explanation..."):
-                explanation_prompt = f"Explain the topic '{topic}' in simple language suitable for a complete beginner. Use clear formatting, bullet points, and relatable analogies. Avoid technical jargon, or define it immediately if it is necessary."
-                response = get_gemini_response(explanation_prompt)
-                if response:
-                    st.session_state.explanation_text = response
-        else:
-            if topic.lower() == "binary search":
-                st.session_state.explanation_text = mock_explanation
-                st.info("💡 Note: Displaying pre-saved demonstration text. Add a Gemini API Key in the sidebar to generate live responses for any topic.")
-            else:
-                st.warning("⚠️ Please provide a Gemini API Key in the sidebar to generate content for custom topics.")
-                
-    if "explanation_text" in st.session_state:
+    if st.session_state.current_content:
         st.markdown('<div class="premium-card">', unsafe_allow_html=True)
         st.markdown('<span class="badge">Explanation</span>', unsafe_allow_html=True)
-        st.markdown(st.session_state.explanation_text)
+        st.markdown(st.session_state.current_content["explanation"])
         st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("👈 Enter a topic and click 'Load Topic & Generate All' in the sidebar.")
 
 # ----------------- TAB 2: REAL-LIFE EXAMPLE -----------------
 with tab2:
     st.markdown("### Real-Life Analogy")
-    st.write("Understand the concept through a concrete, real-life scenario.")
     
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        generate_example = st.button("💡 Give Real-Life Example", key="btn_example")
-        
-    if generate_example:
-        if api_key:
-            with st.spinner("Creating analogy..."):
-                example_prompt = f"Provide one relatable, concrete, real-life analogy or example that illustrates how the topic '{topic}' works in practice. Focus entirely on making the intuition clear, avoiding formal math or code."
-                response = get_gemini_response(example_prompt)
-                if response:
-                    st.session_state.example_text = response
-        else:
-            if topic.lower() == "binary search":
-                st.session_state.example_text = mock_example
-                st.info("💡 Note: Displaying pre-saved demonstration text. Add a Gemini API Key in the sidebar to generate live responses for any topic.")
-            else:
-                st.warning("⚠️ Please provide a Gemini API Key in the sidebar to generate content for custom topics.")
-                
-    if "example_text" in st.session_state:
+    if st.session_state.current_content:
         st.markdown('<div class="premium-card">', unsafe_allow_html=True)
         st.markdown('<span class="badge">Real-life Analogy</span>', unsafe_allow_html=True)
-        st.markdown(st.session_state.example_text)
+        st.markdown(st.session_state.current_content["example"])
         st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("👈 Enter a topic and click 'Load Topic & Generate All' in the sidebar.")
 
 # ----------------- TAB 3: TAKE A QUIZ -----------------
 with tab3:
     st.markdown("### Test Your Understanding")
-    st.write("Take this 5-question quiz to check your comprehension. Submit your answers at the end for immediate feedback.")
     
-    # Generate quiz logic
-    if st.session_state.quiz_generated is None:
-        if topic.lower() == "binary search":
-            st.session_state.quiz_generated = mock_quiz
-        elif api_key:
-            with st.spinner("Generating custom quiz..."):
-                quiz_prompt = f"""Generate a 5-question multiple-choice quiz about the topic "{topic}" to test a beginner's understanding.
-Return a JSON array where each item has exactly these fields:
-- "question": string (the question text)
-- "options": list of 4 strings (the multiple choice options)
-- "answer_index": integer (0 for the first option, 1 for second, 2 for third, 3 for fourth)
-- "explanation": string (brief explanation of the correct answer)
-Ensure the JSON is valid and clean."""
-                response = get_gemini_response(quiz_prompt, is_json=True)
-                if response:
-                    try:
-                        # Clean codeblocks if any returned by LLM
-                        cleaned_response = response.strip()
-                        if cleaned_response.startswith("```json"):
-                            cleaned_response = cleaned_response[7:]
-                        if cleaned_response.endswith("```"):
-                            cleaned_response = cleaned_response[:-3]
-                        cleaned_response = cleaned_response.strip()
-                        st.session_state.quiz_generated = json.loads(cleaned_response)
-                    except Exception as parse_err:
-                        st.error(f"Failed to parse quiz response: {parse_err}")
-                        st.session_state.quiz_generated = mock_quiz
-        else:
-            st.warning("⚠️ Showing default Binary Search Quiz. Provide a Gemini API Key to generate quizzes for other topics.")
-            st.session_state.quiz_generated = mock_quiz
-            
-    # Render Quiz Form
-    if st.session_state.quiz_generated:
-        quiz = st.session_state.quiz_generated
+    if st.session_state.current_content and "quiz" in st.session_state.current_content:
+        st.write("Take this 5-question quiz to check your comprehension. Submit your answers at the end for immediate feedback.")
+        quiz = st.session_state.current_content["quiz"]
         
         # Display questions
         for idx, q in enumerate(quiz):
@@ -468,8 +448,9 @@ Ensure the JSON is valid and clean."""
             if st.button("🔄 Retake Quiz"):
                 st.session_state.quiz_answers = {}
                 st.session_state.quiz_submitted = False
-                st.session_state.quiz_generated = None
                 st.rerun()
+    else:
+        st.info("👈 Enter a topic and click 'Load Topic & Generate All' in the sidebar.")
 
 # ----------------- TAB 4: CHAT WITH TUTOR -----------------
 with tab4:
