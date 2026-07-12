@@ -1,7 +1,8 @@
 import os
 import json
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 # Load local environment variables if available
@@ -285,18 +286,21 @@ def get_gemini_response(prompt_text, system_instruction_text=None, is_json=False
     if not api_key:
         return None
     try:
-        genai.configure(api_key=api_key)
+        # Initialize client with API key
+        client = genai.Client(api_key=api_key)
         
-        config = {}
+        # Build generation configuration
+        config = types.GenerateContentConfig()
+        if system_instruction_text:
+            config.system_instruction = system_instruction_text
         if is_json:
-            config["response_mime_type"] = "application/json"
+            config.response_mime_type = "application/json"
             
-        model = genai.GenerativeModel(
-            model_name=model_name,
-            system_instruction=system_instruction_text,
-            generation_config=config
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt_text,
+            config=config
         )
-        response = model.generate_content(prompt_text)
         return response.text
     except Exception as e:
         st.error(f"Error calling Gemini API: {str(e)}")
