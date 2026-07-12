@@ -264,27 +264,41 @@ Follow these rules:
 with st.sidebar.expander("👁️ View System/Persona Prompt"):
     st.code(system_prompt, language="text")
 
-# Helper function to call Gemini API
+# Helper function to call Gemini API with automatic fallback for high-demand spikes (503)
 def get_gemini_response(prompt_text, system_instruction_text=None, is_json=False):
     if not api_key:
         return None
-    try:
-        client = genai.Client(api_key=api_key)
-        config = types.GenerateContentConfig()
-        if system_instruction_text:
-            config.system_instruction = system_instruction_text
-        if is_json:
-            config.response_mime_type = "application/json"
+        
+    # List of active models on user key to try in sequence if one fails
+    models_to_try = [model_name]
+    for fallback in ["gemini-3.1-flash-lite", "gemini-2.0-flash"]:
+        if fallback not in models_to_try:
+            models_to_try.append(fallback)
             
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt_text,
-            config=config
-        )
-        return response.text
-    except Exception as e:
-        st.error(f"Error calling Gemini API: {str(e)}")
-        return None
+    last_error = None
+    for model in models_to_try:
+        try:
+            client = genai.Client(api_key=api_key)
+            config = types.GenerateContentConfig()
+            if system_instruction_text:
+                config.system_instruction = system_instruction_text
+            if is_json:
+                config.response_mime_type = "application/json"
+                
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt_text,
+                config=config
+            )
+            return response.text
+        except Exception as e:
+            last_error = e
+            # Log the fallback trial in Streamlit sidebar info
+            st.sidebar.info(f"🔄 Model {model} busy or failed. Trying fallback...")
+            continue
+            
+    st.error(f"Error calling Gemini API: {str(last_error)}")
+    return None
 
 # Combined generation function
 def generate_all_topic_materials():
